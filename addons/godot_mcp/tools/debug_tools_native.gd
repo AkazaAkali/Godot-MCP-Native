@@ -3008,6 +3008,9 @@ func _request_runtime_probe_poll(
 		# No cached payload either - return the pending status as-is
 		result["status"] = "timeout"
 		return result
+	if result.get("status") == "stale":
+		result["status"] = "success"
+		result["from_cache"] = true
 	return result
 
 func _is_truthy_runtime_value(value: Variant) -> bool:
