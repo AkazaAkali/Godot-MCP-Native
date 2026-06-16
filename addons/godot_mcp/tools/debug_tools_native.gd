@@ -113,11 +113,13 @@ func register_tools(server_core: RefCounted) -> void:
 	_register_get_runtime_memory_trend(server_core)
 	_register_get_runtime_scene_tree(server_core)
 	_register_inspect_runtime_node(server_core)
+	_register_inspect_runtime_nodes(server_core)
 	_register_create_runtime_node(server_core)
 	_register_delete_runtime_node(server_core)
 	_register_update_runtime_node_property(server_core)
 	_register_call_runtime_node_method(server_core)
 	_register_evaluate_runtime_expression(server_core)
+	_register_evaluate_runtime_expressions(server_core)
 	_register_simulate_runtime_input_event(server_core)
 	_register_simulate_runtime_input_action(server_core)
 	_register_list_runtime_input_actions(server_core)
@@ -1857,6 +1859,36 @@ func _tool_inspect_runtime_node(params: Dictionary) -> Dictionary:
 		return {"error": "Missing required parameter: node_path"}
 	return await _request_runtime_probe_poll("inspect_node", [node_path], ["mcp:node"], params, {"path": node_path})
 
+
+func _register_inspect_runtime_nodes(server_core: RefCounted) -> void:
+	server_core.register_tool(
+		"inspect_runtime_nodes",
+		"Inspect multiple live runtime nodes in a single probe round-trip; one result per path.",
+		{
+			"type": "object",
+			"properties": {
+				"node_paths": {"type": "array", "items": {"type": "string"}},
+				"include_properties": {"type": "boolean", "default": true},
+				"session_id": {"type": "integer"},
+				"timeout_ms": {"type": "integer", "default": 3000}
+			},
+			"required": ["node_paths"]
+		},
+		Callable(self, "_tool_inspect_runtime_nodes"),
+		{"type": "object", "properties": {"results": {"type": "array"}, "count": {"type": "integer"}}},
+		{"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
+		"supplementary", "Debug-Advanced"
+	)
+
+
+func _tool_inspect_runtime_nodes(params: Dictionary) -> Dictionary:
+	var node_paths: Array = params.get("node_paths", [])
+	if node_paths.is_empty():
+		return {"error": "Missing required parameter: node_paths"}
+	var include_properties: bool = params.get("include_properties", true)
+	return await _request_runtime_probe_poll("inspect_nodes", [node_paths, include_properties], ["mcp:nodes"], params)
+
+
 func _register_create_runtime_node(server_core: RefCounted) -> void:
 	server_core.register_tool(
 		"create_runtime_node",
@@ -1997,6 +2029,36 @@ func _tool_evaluate_runtime_expression(params: Dictionary) -> Dictionary:
 		return {"error": "Missing required parameter: expression"}
 	var payload: Array = [expression, params.get("node_path", "")]
 	return await _request_runtime_probe_poll("evaluate_expression", payload, ["mcp:expression_result"], params, {"expression": expression})
+
+
+func _register_evaluate_runtime_expressions(server_core: RefCounted) -> void:
+	server_core.register_tool(
+		"evaluate_runtime_expressions",
+		"Evaluate multiple GDScript Expressions in a single probe round-trip; one result per expression.",
+		{
+			"type": "object",
+			"properties": {
+				"expressions": {"type": "array", "items": {"type": "string"}},
+				"node_path": {"type": "string"},
+				"session_id": {"type": "integer"},
+				"timeout_ms": {"type": "integer", "default": 3000}
+			},
+			"required": ["expressions"]
+		},
+		Callable(self, "_tool_evaluate_runtime_expressions"),
+		{"type": "object", "properties": {"results": {"type": "array"}, "count": {"type": "integer"}}},
+		{"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
+		"supplementary", "Debug-Advanced"
+	)
+
+
+func _tool_evaluate_runtime_expressions(params: Dictionary) -> Dictionary:
+	var expressions: Array = params.get("expressions", [])
+	if expressions.is_empty():
+		return {"error": "Missing required parameter: expressions"}
+	var payload: Array = [expressions, params.get("node_path", "")]
+	return await _request_runtime_probe_poll("evaluate_expressions", payload, ["mcp:expression_results"], params)
+
 
 func _register_simulate_runtime_input_event(server_core: RefCounted) -> void:
 	server_core.register_tool(

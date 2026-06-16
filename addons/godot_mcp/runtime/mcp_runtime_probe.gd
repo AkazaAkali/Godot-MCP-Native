@@ -69,6 +69,8 @@ func _capture_mcp_message(message: String, data: Array) -> bool:
 				return true
 			EngineDebugger.send_message("mcp:node", [_serialize_node(node, 0, 1, true)])
 			return true
+		"inspect_nodes":
+			return _handle_inspect_nodes(data)
 		"create_node":
 			return _handle_create_node(data)
 		"delete_node":
@@ -79,6 +81,8 @@ func _capture_mcp_message(message: String, data: Array) -> bool:
 			return _handle_call_node_method(data)
 		"evaluate_expression":
 			return _handle_evaluate_expression(data)
+		"evaluate_expressions":
+			return _handle_evaluate_expressions(data)
 		"simulate_input_event":
 			return _handle_simulate_input_event(data)
 		"simulate_input_action":
@@ -392,6 +396,49 @@ func _handle_evaluate_expression(data: Array) -> bool:
 		"node_path": str(base_instance.get_path()) if base_instance is Node else "",
 		"value": _serialize_value(result)
 	}])
+	return true
+
+func _handle_inspect_nodes(data: Array) -> bool:
+	# data = [node_paths: Array, include_properties: bool]
+	var paths: Array = []
+	if data.size() >= 1 and data[0] is Array:
+		paths = data[0]
+	var include_properties: bool = data.size() >= 2 and bool(data[1])
+	var results: Array = []
+	for raw_path in paths:
+		var path_str: String = str(raw_path)
+		var node: Node = _resolve_target_node(path_str)
+		if not node:
+			results.append({"path": path_str, "error": "Node not found: " + path_str})
+			continue
+		results.append({"path": path_str, "node": _serialize_node(node, 0, 1, include_properties)})
+	EngineDebugger.send_message("mcp:nodes", [{"results": results, "count": results.size()}])
+	return true
+
+func _handle_evaluate_expressions(data: Array) -> bool:
+	# data = [expressions: Array, node_path: String]
+	var expressions: Array = []
+	if data.size() >= 1 and data[0] is Array:
+		expressions = data[0]
+	var node_path: String = ""
+	if data.size() >= 2:
+		node_path = str(data[1])
+	var base_instance: Object = _resolve_target_node(node_path)
+	if not base_instance:
+		base_instance = get_tree().current_scene if get_tree().current_scene else self
+	var results: Array = []
+	for raw_expr in expressions:
+		var expression_text: String = str(raw_expr)
+		var expression: Expression = Expression.new()
+		if expression.parse(expression_text, []) != OK:
+			results.append({"expression": expression_text, "error": "Expression parse failed"})
+			continue
+		var result: Variant = expression.execute([], base_instance, false)
+		if expression.has_execute_failed():
+			results.append({"expression": expression_text, "error": "Expression execution failed"})
+			continue
+		results.append({"expression": expression_text, "value": _serialize_value(result)})
+	EngineDebugger.send_message("mcp:expression_results", [{"results": results, "count": results.size()}])
 	return true
 
 func _handle_get_runtime_screenshot(data: Array) -> bool:
